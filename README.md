@@ -262,32 +262,37 @@ server.
 
 ---
 
-## Known limitations
+### adjudicate() — known limitations
 
-Stated plainly, because a trust tool that hides its own failure modes is a
-contradiction.
+**No relative comparison between existing and incoming evidence.**
+`adjudicate()` decides whether to accept an overwrite by checking only
+whether the incoming fact clears `store_threshold` on its own. It never
+compares `existing_faithfulness` against `incoming_faithfulness`. In
+principle, a weakly-supported incoming fact (say, 0.52) could overwrite a
+strongly-supported existing memory (say, 0.99) purely because both cross
+the same fixed bar independently.
 
-**One reasoning failure remains.** "I moved from Delhi to Bangalore last month"
-versus "the user lives in Bangalore" returns contradiction at 0.774. The model
-appears to read "moved *from* Delhi" as evidence against Bangalore. Neither guard
-applies — the pair is highly related and correctly attributed. Fixing it likely
-needs a different model or fine-tuning, both out of scope for this release.
+Four hand-constructed test cases attempted to reproduce this in practice
+and none succeeded — in every attempt, the model's faithfulness scores
+either both landed near zero, or landed far enough apart that the existing
+threshold logic correctly triggered REVIEW or BLOCK on its own. Observed
+pattern: DeBERTa-v3-small rarely assigns a `faithful` label in the
+0.5–0.65 range on these pairs; it tends toward the extremes. The gap is
+real by code inspection but has not been confirmed to cause an incorrect
+decision in testing.
 
-**The guards are heuristics, not solvers.** Attribution detection matches surface
-patterns — "my brother", "my colleague said". It will miss "the guy who lives
-next door". It is deliberately conservative: when it fires it downgrades to
-`REVIEW`, never `REJECT`, so a false positive costs a human glance rather than
-lost information.
+**No relatedness guard.** `check()` treats a "contradiction" verdict as
+unreliable when the source and fact are semantically unrelated (see the
+relatedness guard above), and downgrades to REVIEW rather than REJECT.
+`adjudicate()` does not run this guard. An incoming fact that is simply
+unrelated to its own source — not a genuine contradiction of it — can
+still be labelled "contradicts" by the NLI model and BLOCK the overwrite.
+In testing this produced the correct outcome (protecting the existing
+memory) but for a reason that was never actually verified as sound.
 
-**The relatedness threshold comes from a small sample.** In a diagnostic set,
-unrelated pairs scored 0.46–0.53 similarity while genuine contradictions scored
-0.63–0.79. The default sits at 0.58, in that gap. Seven pairs is enough to
-justify the approach, not enough to guarantee it generalises. Tune it against
-your own data.
-
-**`neutral` and `contradicts` both score near zero.** The gate distinguishes them
-by label, so decisions are correct, but the numeric score is uninformative for
-neutral results. Cosmetic rather than a correctness issue, and on the list.
+Both of these are documented rather than silently patched, in keeping with
+this project's position that a trust tool should state its own failure
+modes plainly.
 
 ---
 
