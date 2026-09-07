@@ -160,6 +160,12 @@ class AdjudicationDecision:
     policy_version: str
     policy_fingerprint: str
     timestamp: str
+    # When the existing memory was first written, if the caller knows it.
+    # Optional, defaults to None, so existing callers and tests that don't
+    # pass it keep working unchanged. Lets an auditor reading one decision
+    # see both "when this overwrite happened" and "how old was the memory
+    # that got replaced" without cross-referencing the log by fact text.
+    existing_timestamp: Optional[str] = None
 
     @property
     def overwrite_allowed(self) -> bool:
@@ -349,6 +355,7 @@ class MemoryGate:
         existing_source: str,
         incoming_fact: str,
         incoming_source: str,
+        existing_timestamp: Optional[str] = None,
     ) -> AdjudicationDecision:
         """
         Decide whether an incoming memory may overwrite an existing one.
@@ -364,6 +371,31 @@ class MemoryGate:
         Note this compares each memory against *its own* source, not against
         each other. Two facts can both be true of different moments in time;
         what matters is whether each was justified when it was made.
+
+        existing_timestamp is optional: if the caller knows when the existing
+        memory was first written (e.g. looked up from the audit log), pass it
+        so the returned decision lets an auditor see both when the overwrite
+        happened and how old the memory being replaced was, without having to
+        cross-reference the log by fact text. If omitted, it's simply None —
+        current behavior for callers that don't pass it is unchanged.
+
+        Known limitation: this does not compare existing_faithfulness against
+        incoming_faithfulness. An incoming fact only needs to clear its own
+        threshold independently — there is no check that it's at least as
+        well-evidenced as what it would replace. In principle a weakly
+        faithful incoming fact could overwrite a strongly faithful existing
+        one. Several hand-constructed test cases attempted to reproduce this
+        and did not land in the vulnerable score range — DeBERTa-v3-small
+        tended toward extreme scores (near 0 or near 1) rather than the
+        mid-range needed to trigger it — so this is a real gap by code
+        inspection, not one confirmed in practice.
+
+        Also does not run the relatedness guard used in check(): an incoming
+        fact that is simply unrelated to its own source (rather than a true
+        contradiction of it) can still be labelled "contradicts" by the NLI
+        model and BLOCK here. In testing this produced the correct outcome
+        by coincidence — protecting the existing memory — but for a reason
+        that wasn't actually verified.
         """
         existing = self._score(existing_source, existing_fact)
         incoming = self._score(incoming_source, incoming_fact)
@@ -403,4 +435,5 @@ class MemoryGate:
             policy_version=self.policy.version,
             policy_fingerprint=self.policy.fingerprint(),
             timestamp=self._now(),
+            existing_timestamp=existing_timestamp,
         )
