@@ -333,7 +333,15 @@ Scoring never requires a database.
 
 ## Roadmap
 
-- Distinguish *unsupported* from *actively contradicting* in the score itself
+- Distinguish unsupported from actively contradicting in the score itself
+- **Relative evidence check in `adjudicate()`** — compare `existing_faithfulness`
+  against `incoming_faithfulness` directly, rather than checking incoming
+  against a fixed threshold alone. Addresses the asymmetric-evidence gap
+  documented above; not yet implemented pending a test case that actually
+  reproduces the failure in practice.
+- **Relatedness guard in `adjudicate()`** — port the same unrelated-pairs
+  check used in `check()` so a spurious "contradicts" label can't BLOCK an
+  overwrite for the wrong reason.
 - Adapters for specific memory engines, driven by what real users run
 - Policy diffing - show what changed between two policy versions
 - Entity-relationship awareness beyond surface patterns
