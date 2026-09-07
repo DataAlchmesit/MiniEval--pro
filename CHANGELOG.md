@@ -181,3 +181,22 @@ Initial release.
 - Relevance via all-MiniLM-L6-v2
 - Toxicity via toxic-bert
 - Runs fully local, no API calls
+
+  ## [Unreleased]
+
+### Added
+- `AdjudicationDecision.existing_timestamp` (optional, defaults to `None`).
+  Callers that know when the existing memory was first written (e.g. by
+  looking it up from the audit log) can now pass `existing_timestamp` to
+  `adjudicate()`, so a single decision record shows both when the overwrite
+  happened and how old the memory being replaced was — without needing to
+  cross-reference the log by fact text. Fully backward compatible: omitting
+  it behaves exactly as before.
+
+### Documented
+- Two known limitations in `adjudicate()`, found by direct code review and
+  tested against four hand-constructed cases: no relative comparison
+  between existing and incoming faithfulness scores, and no relatedness
+  guard (unlike `check()`). Neither reproduced an incorrect decision in
+  testing, but both represent theoretical gaps worth tracking. See
+  README.md for details.
