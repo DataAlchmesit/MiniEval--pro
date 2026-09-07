@@ -219,6 +219,7 @@ of quality.
 
 ##  · Revised Roadmap
 
+```
 Phase 1: Adjudication Engine (Current Focus)
   ├── Step 1.1: Environment & Test Harness Setup
   ├── Step 1.2: Cases 1 & 6 — Semantic Sameness & Subsumption
@@ -239,7 +240,8 @@ Phase 3: Audit Trail & Policy Versioning (Original M4)
         
 Phase 4: Integrations & Distribution (Original M2 Adapters + M5 Release)
   └── Step 4.1: Memory Engine Adapters (Mem0, Supermemory) & PyPI Release
-  
+
+```
 ---
 
 
