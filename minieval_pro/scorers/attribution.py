@@ -15,11 +15,28 @@ the source attribute this to the speaker, or to a third party?
 Scope and limits — stated plainly:
 
     This is a heuristic over surface patterns, not a coreference resolver.
-    It catches the common constructions ("my brother", "my neighbour's cat",
-    "my colleague said") and will miss unusual phrasings. It is deliberately
-    conservative: when third-party attribution is detected it *downgrades*
-    a fact to REVIEW rather than rejecting it, so a false positive costs a
-    human glance rather than lost information.
+    It catches the common constructions ("my brother", "her neighbour's cat",
+    "my colleague said", "she works as...") and will miss unusual phrasings.
+    It is deliberately conservative: when third-party attribution is
+    detected it *downgrades* a fact to REVIEW rather than rejecting it, so
+    a false positive costs a human glance rather than lost information.
+
+Fixed 2026 — two confirmed gaps, found via test_attribution_gaps.py:
+
+    1. The possessive check only matched the literal word "my". "Her
+       brother is a lawyer" produced third_party=False, confidence=high —
+       the guard actively vouched the fact was safe when it wasn't. Now
+       matches my/her/his/their/our.
+
+    2. The third-person pronoun check (he/she/they/...) only ran inside
+       the reporting-verb branch, so a plain declarative sentence like
+       "She works as a lawyer" with no reporting verb never reached it at
+       all. Now runs independently as its own check.
+
+    Both produced the same dangerous silent-STORE failure mode this
+    module exists to prevent — confidence=high, detected=[], "No
+    third-party attribution detected" — on inputs that were, in fact,
+    third-party attributions.
 """
 
 from __future__ import annotations
@@ -45,6 +62,12 @@ THIRD_PARTY_RELATIONS = [
     "grandmother", "grandfather", "grandma", "grandpa",
     "doctor", "teacher", "landlord", "client", "customer",
 ]
+
+# Possessive pronouns that mark the following relation as belonging to
+# someone other than the speaker. "My" was the only one checked before —
+# "her", "his", "their", "our" describe a third party's relation just as
+# clearly and were previously invisible to this guard entirely.
+THIRD_PARTY_POSSESSIVES = ["her", "his", "their", "our"]
 
 # Verbs that mark reported speech — the source is relaying someone else's
 # statement rather than making a first-person claim.
@@ -73,14 +96,24 @@ class AttributionResult:
 
 
 def _find_possessive_third_parties(text: str) -> list[str]:
-    """Find 'my <relation>' constructions, with or without a possessive 's."""
+    """
+    Find '<possessive> <relation>' constructions, with or without a
+    possessive 's.
+
+    Covers "my brother", "her neighbour's", "their colleague" — any of
+    my/her/his/their/our followed by a relation word. Previously only
+    matched "my", which meant "her brother is a lawyer" produced no
+    signal at all despite being exactly as clear a third-party
+    attribution as "my brother is a lawyer".
+    """
     found = []
     lowered = text.lower()
-    for relation in THIRD_PARTY_RELATIONS:
-        # "my brother", "my neighbour's", "my colleague"
-        pattern = rf"\bmy\s+{re.escape(relation)}(?:'s|s')?\b"
-        if re.search(pattern, lowered):
-            found.append(f"my {relation}")
+    all_possessives = ["my"] + THIRD_PARTY_POSSESSIVES
+    for possessive in all_possessives:
+        for relation in THIRD_PARTY_RELATIONS:
+            pattern = rf"\b{re.escape(possessive)}\s+{re.escape(relation)}(?:'s|s')?\b"
+            if re.search(pattern, lowered):
+                found.append(f"{possessive} {relation}")
     return found
 
 
@@ -91,6 +124,24 @@ def _find_reported_speech(text: str) -> list[str]:
     for verb in REPORTING_VERBS:
         if re.search(rf"\b{re.escape(verb)}\b", lowered):
             found.append(verb)
+    return found
+
+
+def _find_third_person_subject(text: str) -> list[str]:
+    """
+    Find third-person subject pronouns (he/she/they/...) anywhere in the
+    source, independent of whether a reporting verb is present.
+
+    Previously this check only ran inside the reported-speech branch, so
+    a plain declarative sentence like "She works as a lawyer downtown" —
+    no "my", no "said" — never reached any third-party check at all and
+    fell straight through to speaker_is_subject=True, confidence=high.
+    """
+    found = []
+    lowered = text.lower()
+    for pronoun in THIRD_PERSON_SUBJECTS:
+        if re.search(rf"\b{re.escape(pronoun)}\b", lowered):
+            found.append(pronoun)
     return found
 
 
@@ -125,7 +176,8 @@ def check_attribution(source: str, fact: str) -> AttributionResult:
     possessives = _find_possessive_third_parties(source)
     reporting = _find_reported_speech(source)
 
-    # Strongest signal: source is about "my <someone>", fact is about the user.
+    # Strongest signal: source is about "my/her/his/their/our <someone>",
+    # fact is about the user.
     if possessives:
         return AttributionResult(
             speaker_is_subject=False,
@@ -140,15 +192,12 @@ def check_attribution(source: str, fact: str) -> AttributionResult:
     # Reported speech: "my colleague mentioned she is moving" — the subject of
     # the reported clause is a third party.
     if reporting:
-        lowered = source.lower()
-        has_third_person = any(
-            re.search(rf"\b{p}\b", lowered) for p in THIRD_PERSON_SUBJECTS
-        )
-        if has_third_person:
+        third_person = _find_third_person_subject(source)
+        if third_person:
             return AttributionResult(
                 speaker_is_subject=False,
                 confidence="high",
-                detected=reporting + ["third-person subject"],
+                detected=reporting + third_person,
                 explanation=(
                     "Source reports what someone else said about a third party. "
                     "A fact about the user may be a misattribution."
@@ -161,6 +210,21 @@ def check_attribution(source: str, fact: str) -> AttributionResult:
             explanation=(
                 "Source contains reported speech; the fact may belong to "
                 "the person being quoted rather than the speaker."
+            ),
+        )
+
+    # Plain third-person subject with no possessive and no reporting verb —
+    # e.g. "She works as a lawyer downtown." Checked independently now,
+    # rather than only as a sub-check inside the reporting-verb branch.
+    third_person = _find_third_person_subject(source)
+    if third_person:
+        return AttributionResult(
+            speaker_is_subject=False,
+            confidence="high",
+            detected=third_person,
+            explanation=(
+                f"Source refers to a third party ({third_person[0]}), not "
+                f"the speaker. A fact about the user may be a misattribution."
             ),
         )
 
