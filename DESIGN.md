@@ -217,6 +217,35 @@ of quality.
 
 ---
 
+##  · Revised Roadmap
+
+```
+Phase 1: Adjudication Engine (Ccompleted)
+  ├── Step 1.1: Environment & Test Harness Setup
+  ├── Step 1.2: Cases 1 & 6 — Semantic Sameness & Subsumption
+  ├── Step 1.3: Cases 2 & 3 — Faithful Updates & Overwrite Protection
+  ├── Step 1.4: Cases 4 & 5 — Weak Support & Asymmetric Evidence
+  └── Step 1.5: Case 7 — Audit Metadata & Timestamps
+        
+        
+Phase 2: Fundamental NLI & Heuristic Patching (Original M3)
+  ├── Step 2.1: Attribution Dependency Parsing (Replacing surface regex)
+  ├── Step 2.2: Temporal State Transition Rules ("moved from X to Y")
+  └── Step 2.3: Dynamic Relatedness Thresholds & Probability Calibration
+        
+        
+Phase 3: Audit Trail & Policy Versioning (Original M4)
+  └── Step 3.1: Immutable Policy Fingerprinting & Export Engines
+        
+        
+Phase 4: Integrations & Distribution (Original M2 Adapters + M5 Release)
+  └── Step 4.1: Memory Engine Adapters (Mem0, Supermemory) & PyPI Release
+
+```
+---
+
+
+
 ## 8 · Tracked issues
 
 Each is independently shippable.
